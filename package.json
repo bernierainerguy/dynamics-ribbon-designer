@@ -1,0 +1,22 @@
+{
+  "name": "dynamics-ribbon-designer",
+  "version": "0.3.12",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "latest",
+    "@xmldom/xmldom": "^0.9.11",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}

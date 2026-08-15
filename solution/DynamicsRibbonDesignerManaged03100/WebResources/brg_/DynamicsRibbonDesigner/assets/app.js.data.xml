@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<WebResource xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <WebResourceId>{6a47dbcc-85de-46c2-b3ea-55c0eae355ca}</WebResourceId>
+  <Name>brg_/DynamicsRibbonDesigner/assets/app.js</Name>
+  <DisplayName>Dynamics Ribbon Designer application script</DisplayName>
+  <Description>Dynamics Ribbon Designer version 0.3.12.0</Description>
+  <WebResourceType>3</WebResourceType>
+  <IntroducedVersion>0.3.2.0</IntroducedVersion>
+  <IsEnabledForMobileClient>0</IsEnabledForMobileClient>
+  <IsAvailableForMobileOffline>0</IsAvailableForMobileOffline>
+  <IsCustomizable>1</IsCustomizable>
+  <CanBeDeleted>1</CanBeDeleted>
+  <IsHidden>0</IsHidden>
+  <FileName>/WebResources/brg_DynamicsRibbonDesignerassetsappjs6A47DBCC-85DE-46C2-B3EA-55C0EAE355CA</FileName>
+</WebResource>

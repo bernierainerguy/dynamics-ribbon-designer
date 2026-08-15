@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<WebResource xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <WebResourceId>{cf33bfd3-807b-4cc7-8912-5ecd35fe0323}</WebResourceId>
+  <Name>brg_/DynamicsRibbonDesigner/index.html</Name>
+  <DisplayName>Dynamics Ribbon Designer</DisplayName>
+  <Description>Dynamics Ribbon Designer version 0.3.12.0</Description>
+  <WebResourceType>1</WebResourceType>
+  <IntroducedVersion>0.3.2.0</IntroducedVersion>
+  <IsEnabledForMobileClient>0</IsEnabledForMobileClient>
+  <IsAvailableForMobileOffline>0</IsAvailableForMobileOffline>
+  <IsCustomizable>1</IsCustomizable>
+  <CanBeDeleted>1</CanBeDeleted>
+  <IsHidden>0</IsHidden>
+  <FileName>/WebResources/brg_DynamicsRibbonDesignerindexhtmlCF33BFD3-807B-4CC7-8912-5ECD35FE0323</FileName>
+</WebResource>

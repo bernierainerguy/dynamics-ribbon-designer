@@ -1,0 +1,23 @@
+node_modules/
+dist/
+coverage/
+
+# Local .NET build output
+**/bin/
+**/obj/
+
+# Publish only the current portable solution source
+solution/*
+!solution/DynamicsRibbonDesignerManaged03100/
+!solution/DynamicsRibbonDesignerManaged03100/**
+
+# Environment-specific packaging utilities are intentionally local-only
+tools/
+
+# Superseded packages and local packaging logs
+release/*.zip
+release/*.log
+release/portable/*.zip
+!release/portable/DynamicsRibbonDesigner_0_3_12_0_managed.zip
+
+.DS_Store
