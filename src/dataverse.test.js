@@ -9,9 +9,15 @@ import {
   getXrm,
   importUnmanagedSolution,
   isDataverseHost,
+  listPublishers,
+  listTables,
   listUnmanagedSolutions,
+  manifestWebResourceName,
   publishTable,
-  retrieveEntityRibbonXml
+  retrieveEntityRibbonBySurface,
+  retrieveEntityRibbonXml,
+  retrieveImportJob,
+  storeChangeManifest
 } from "./dataverse";
 
 beforeEach(() => {
@@ -157,5 +163,85 @@ describe("Dataverse solution operations", () => {
     expect(importBody.CustomizationFile).toBe("AQID");
     expect(importBody.OverwriteUnmanagedCustomizations).toBe(false);
     expect(publishBody.ParameterXml).toBe("<importexportxml><entities><entity>account</entity></entities></importexportxml>");
+  });
+
+  it("retrieves each ribbon surface separately and reports partial failures", async () => {
+    const ribbon = (label) => new Response(
+      JSON.stringify({ CompressedEntityXml: asBase64(zipSync({ "RibbonXml.xml": strToU8(`<Ribbon Id="${label}" />`) })) }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+    window = {
+      location: { origin: "https://direct.crm.dynamics.com", pathname: "/WebResources/brg_/DynamicsRibbonDesigner/index.html" }
+    };
+    window.parent = window;
+    fetch
+      .mockResolvedValueOnce(ribbon("form"))
+      .mockResolvedValueOnce(ribbon("grid"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "Subgrid unavailable." } }), { status: 400, headers: { "Content-Type": "application/json" } }));
+
+    const { sources, failures } = await retrieveEntityRibbonBySurface("account");
+    expect(sources.map((source) => source.surface)).toEqual(["form", "grid"]);
+    expect(failures).toEqual(["subgrid"]);
+    expect(fetch.mock.calls[0][0]).toContain("RibbonLocationFilters'Form'");
+    expect(fetch.mock.calls[1][0]).toContain("RibbonLocationFilters'HomepageGrid'");
+    expect(fetch.mock.calls[2][0]).toContain("RibbonLocationFilters'SubGrid'");
+  });
+
+  it("returns the import job id so the result can be verified", async () => {
+    fetch
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: "<importexportxml />", progress: 100 }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    const importJobId = await importUnmanagedSolution(Uint8Array.from([1]));
+    expect(JSON.parse(fetch.mock.calls[0][1].body).ImportJobId).toBe(importJobId);
+
+    const job = await retrieveImportJob(importJobId);
+    expect(fetch.mock.calls[1][0]).toContain(`importjobs(${importJobId})`);
+    expect(job.data).toBe("<importexportxml />");
+  });
+
+  it("lists customisable tables and publishers for the pickers", async () => {
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ value: [
+      { LogicalName: "contact", DisplayName: { UserLocalizedLabel: { Label: "Contact" } } },
+      { LogicalName: "account", DisplayName: { UserLocalizedLabel: { Label: "Account" } } }
+    ] }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const tables = await listTables();
+    expect(tables.map((table) => table.logicalName)).toEqual(["account", "contact"]);
+    expect(fetch.mock.calls[0][0]).toContain("IsCustomizable/Value eq true");
+
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ value: [
+      { publisherid: "1", customizationprefix: "brg", friendlyname: "Bernier" },
+      { publisherid: "2", customizationprefix: "", friendlyname: "No prefix" }
+    ] }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    expect((await listPublishers()).map((item) => item.customizationprefix)).toEqual(["brg"]);
+  });
+
+  it("stores the change manifest as a solution-owned web resource", async () => {
+    expect(manifestWebResourceName("BRG", "New_Account")).toBe("brg_/ribbonmanifests/new_account.js");
+
+    fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify({ value: [] }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ value: [{ webresourceid: "44444444-4444-4444-4444-444444444444" }] }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const name = await storeChangeManifest({
+      solutionName: "brg_account_ribbon",
+      publisherPrefix: "brg",
+      tableName: "account",
+      manifest: { tableLogicalName: "account" }
+    });
+
+    expect(name).toBe("brg_/ribbonmanifests/account.js");
+    const created = JSON.parse(fetch.mock.calls[1][1].body);
+    expect(created).toMatchObject({ name, webresourcetype: 3 });
+    expect(JSON.parse(atob(created.content))).toEqual({ tableLogicalName: "account" });
+    expect(JSON.parse(fetch.mock.calls[3][1].body)).toMatchObject({
+      ComponentType: 61,
+      SolutionUniqueName: "brg_account_ribbon",
+      AddRequiredComponents: false
+    });
+    expect(JSON.parse(fetch.mock.calls[4][1].body).ParameterXml).toContain("<webresource>44444444-4444-4444-4444-444444444444</webresource>");
   });
 });

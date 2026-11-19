@@ -5,6 +5,18 @@ const SURFACES = {
   other: "Other"
 };
 
+const SURFACE_ORDER = ["form", "grid", "subgrid", "other"];
+
+const CONTROL_ELEMENTS = ["Button", "ToggleButton", "SplitButton", "FlyoutAnchor", "CheckBox"];
+
+const CONTROL_TYPE_LABELS = {
+  Button: "Button",
+  ToggleButton: "Toggle",
+  SplitButton: "Split button",
+  FlyoutAnchor: "Flyout",
+  CheckBox: "Check box"
+};
+
 export function inferSurface(id = "") {
   const value = id.toLowerCase();
   if (value.includes("homepagegrid")) return "grid";
@@ -15,6 +27,24 @@ export function inferSurface(id = "") {
 
 export function surfaceLabel(surface) {
   return SURFACES[surface] ?? SURFACES.other;
+}
+
+export function surfaceSummary(surfaces = []) {
+  const list = surfaces.length ? surfaces : ["other"];
+  return list.map(surfaceLabel).join(" · ");
+}
+
+export function controlTypeLabel(type = "Button") {
+  return CONTROL_TYPE_LABELS[type] ?? type;
+}
+
+export function compatibilityWarning({ surface, surfaces, command }) {
+  const list = surfaces?.length ? surfaces : [surface];
+  if (list.every((item) => !item || item === "other")) {
+    return "Outside the supported form, main-grid and subgrid surfaces; verify in a test environment.";
+  }
+  if (!command) return "Dataverse did not expose a command mapping; verify this control in a test environment.";
+  return "";
 }
 
 function isResourceReference(value = "") {
@@ -63,39 +93,85 @@ function resolveLabel(value, labels) {
   return isResourceReference(value) ? friendlyResourceLabel(value) : value;
 }
 
-export function parseRibbonXml(xml) {
+function parseDocument(xml) {
   if (!xml?.trim()) throw new Error("The ribbon XML is empty.");
   const parser = new DOMParser();
   const document = parser.parseFromString(xml, "application/xml");
-  const parseError = document.getElementsByTagName("parsererror")[0];
-  if (parseError) throw new Error("The file is not valid XML.");
+  if (document.getElementsByTagName("parsererror")[0]) throw new Error("The file is not valid XML.");
+  return document;
+}
+
+function controlElements(document) {
+  return CONTROL_ELEMENTS.flatMap((name) => [...document.getElementsByTagName(name)]);
+}
+
+function readControls(xml, forcedSurface) {
+  const document = parseDocument(xml);
   const labels = resourceLabels(document);
 
-  return [...document.getElementsByTagName("Button")]
-    .map((button) => {
+  return controlElements(document)
+    .map((control) => {
       const ancestors = [];
-      let node = button.parentElement || button.parentNode;
+      let node = control.parentElement || control.parentNode;
       while (node) {
         if (node.getAttribute?.("Id")) ancestors.push(node.getAttribute("Id"));
         node = node.parentElement;
       }
-      const id = button.getAttribute("Id") || "";
+      const id = control.getAttribute("Id") || "";
       const context = [id, ...ancestors].join(" ");
+      const command = control.getAttribute("Command") || "";
+      const tooltip = control.getAttribute("ToolTipDescription") || control.getAttribute("ToolTipTitle") || "";
       return {
         id,
-        command: button.getAttribute("Command") || "",
+        command,
+        type: control.localName || control.nodeName,
         label: resolveLabel(
-          button.getAttribute("LabelText") || button.getAttribute("Alt") || id.split(".").at(-1) || "Unnamed button",
+          control.getAttribute("LabelText") || control.getAttribute("Alt") || id.split(".").at(-1) || "Unnamed control",
           labels
         ),
-        description: (() => {
-          const tooltip = button.getAttribute("ToolTipDescription") || button.getAttribute("ToolTipTitle") || "";
-          return isResourceReference(tooltip) ? "" : resolveLabel(tooltip, labels);
-        })(),
-        surface: inferSurface(context)
+        description: isResourceReference(tooltip) ? "" : resolveLabel(tooltip, labels),
+        surfaces: [forcedSurface || inferSurface(context)]
       };
     })
-    .filter((button) => button.id);
+    .filter((control) => control.id);
+}
+
+function mergeControls(controls) {
+  const merged = new Map();
+  for (const control of controls) {
+    const existing = merged.get(control.id);
+    if (!existing) {
+      merged.set(control.id, { ...control, surfaces: [...control.surfaces] });
+      continue;
+    }
+    for (const surface of control.surfaces) {
+      if (!existing.surfaces.includes(surface)) existing.surfaces.push(surface);
+    }
+    if (!existing.command) existing.command = control.command;
+    if (!existing.description) existing.description = control.description;
+  }
+
+  return [...merged.values()].map((control) => {
+    const surfaces = [...control.surfaces].sort(
+      (left, right) => SURFACE_ORDER.indexOf(left) - SURFACE_ORDER.indexOf(right)
+    );
+    return {
+      ...control,
+      surfaces,
+      surface: surfaces[0],
+      compatibilityWarning: compatibilityWarning({ surfaces, command: control.command })
+    };
+  });
+}
+
+export function parseRibbonXml(xml, { surface } = {}) {
+  return mergeControls(readControls(xml, surface));
+}
+
+export function parseRibbonSurfaces(sources) {
+  const controls = sources.flatMap(({ surface, xml }) => readControls(xml, surface));
+  if (!controls.length && !sources.length) throw new Error("The ribbon XML is empty.");
+  return mergeControls(controls);
 }
 
 export function escapeXml(value = "") {

@@ -3,7 +3,7 @@
   <WebResourceId>{30f2f599-e904-497c-b2b2-872543e6c101}</WebResourceId>
   <Name>brg_/DynamicsRibbonDesigner/assets/app.css</Name>
   <DisplayName>Dynamics Ribbon Designer styles</DisplayName>
-  <Description>Dynamics Ribbon Designer version 0.3.12.0</Description>
+  <Description>Dynamics Ribbon Designer version 0.3.17.0</Description>
   <WebResourceType>2</WebResourceType>
   <IntroducedVersion>0.3.2.0</IntroducedVersion>
   <IsEnabledForMobileClient>0</IsEnabledForMobileClient>

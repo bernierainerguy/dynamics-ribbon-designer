@@ -18,6 +18,6 @@ tools/
 release/*.zip
 release/*.log
 release/portable/*.zip
-!release/portable/DynamicsRibbonDesigner_0_3_12_0_managed.zip
+!release/portable/DynamicsRibbonDesigner_0_3_17_0_managed.zip
 
 .DS_Store

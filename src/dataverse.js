@@ -217,15 +217,26 @@ export async function addTableToSolution(solutionName, logicalName) {
 }
 
 export async function importUnmanagedSolution(bytes) {
+  const importJobId = crypto.randomUUID();
   await webApi("ImportSolution", {
     method: "POST",
     body: JSON.stringify({
       OverwriteUnmanagedCustomizations: false,
       PublishWorkflows: false,
       CustomizationFile: asBase64(bytes),
-      ImportJobId: crypto.randomUUID()
+      ImportJobId: importJobId
     })
   });
+  return importJobId;
+}
+
+export async function retrieveImportJob(importJobId) {
+  const body = await webApi(`importjobs(${importJobId})?$select=data,progress,completedon`);
+  return {
+    data: body?.data ?? "",
+    progress: body?.progress ?? null,
+    completedOn: body?.completedon ?? null
+  };
 }
 
 export async function publishTable(logicalName) {
@@ -236,4 +247,122 @@ export async function publishTable(logicalName) {
       ParameterXml: `<importexportxml><entities><entity>${safeName}</entity></entities></importexportxml>`
     })
   });
+}
+
+const RIBBON_SURFACE_LOCATIONS = [
+  [1, "form"],
+  [2, "grid"],
+  [4, "subgrid"]
+];
+
+/**
+ * Retrieves the ribbon once per location filter so each control's surface comes from
+ * Dataverse rather than from pattern matching on the control ID.
+ */
+export async function retrieveEntityRibbonBySurface(entityName) {
+  const results = await Promise.allSettled(
+    RIBBON_SURFACE_LOCATIONS.map(([location]) => retrieveEntityRibbonXml(entityName, location))
+  );
+  const sources = [];
+  const failures = [];
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") sources.push({ surface: RIBBON_SURFACE_LOCATIONS[index][1], xml: result.value });
+    else failures.push(RIBBON_SURFACE_LOCATIONS[index][1]);
+  });
+  if (!sources.length) {
+    const reason = results.find((result) => result.status === "rejected")?.reason;
+    throw reason instanceof Error ? reason : new Error("Dataverse returned no ribbon definitions.");
+  }
+  return { sources, failures };
+}
+
+export async function listTables() {
+  const body = await webApi(
+    "EntityDefinitions?$select=LogicalName,DisplayName&$filter=IsCustomizable/Value eq true"
+  );
+  return (body?.value ?? [])
+    .map((table) => ({
+      logicalName: table.LogicalName,
+      displayName: table.DisplayName?.UserLocalizedLabel?.Label || table.LogicalName
+    }))
+    .filter((table) => table.logicalName)
+    .sort((left, right) => left.displayName.localeCompare(right.displayName));
+}
+
+export async function listPublishers() {
+  const body = await webApi(
+    "publishers?$select=publisherid,uniquename,friendlyname,customizationprefix&$orderby=friendlyname asc"
+  );
+  return (body?.value ?? []).filter((publisher) => publisher.customizationprefix);
+}
+
+/**
+ * Dataverse validates a web resource extension against its type, and JSON is not one of the
+ * supported types, so the manifest is stored as a `.js` JScript resource holding JSON text.
+ * Nothing loads it as a script; it is read back and parsed by this designer only.
+ */
+export function manifestWebResourceName(publisherPrefix, tableName) {
+  const prefix = publisherPrefix.trim().toLowerCase().replace(/[^a-z0-9]/g, "") || "brg";
+  const table = tableName.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_") || "table";
+  return `${prefix}_/ribbonmanifests/${table}.js`;
+}
+
+async function findWebResourceId(name) {
+  const escapedName = name.replaceAll("'", "''");
+  const body = await webApi(`webresourceset?$select=webresourceid&$filter=name eq '${escapedName}'&$top=1`);
+  return body?.value?.[0]?.webresourceid ?? null;
+}
+
+/**
+ * Stores the change manifest in the customisation solution itself so a later rollback does
+ * not depend on the operator still holding the downloaded JSON file.
+ */
+export async function storeChangeManifest({ solutionName, publisherPrefix, tableName, manifest }) {
+  const name = manifestWebResourceName(publisherPrefix, tableName);
+  const content = asBase64(new TextEncoder().encode(JSON.stringify(manifest, null, 2)));
+  const existingId = await findWebResourceId(name);
+
+  if (existingId) {
+    await webApi(`webresourceset(${existingId})`, { method: "PATCH", body: JSON.stringify({ content }) });
+  } else {
+    await webApi("webresourceset", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        displayname: `Ribbon change manifest - ${tableName.trim()}`,
+        description: "Change manifest written by Dynamics Ribbon Designer. Used to roll back its hide actions.",
+        webresourcetype: 3,
+        content
+      })
+    });
+  }
+
+  const webResourceId = existingId || (await findWebResourceId(name));
+  if (!webResourceId) throw new Error("The manifest web resource could not be located after saving.");
+
+  await webApi("AddSolutionComponent", {
+    method: "POST",
+    body: JSON.stringify({
+      ComponentId: webResourceId,
+      ComponentType: 61,
+      SolutionUniqueName: solutionName,
+      AddRequiredComponents: false
+    })
+  });
+  await webApi("PublishXml", {
+    method: "POST",
+    body: JSON.stringify({
+      ParameterXml: `<importexportxml><webresources><webresource>${webResourceId}</webresource></webresources></importexportxml>`
+    })
+  });
+  return name;
+}
+
+export async function retrieveStoredChangeManifest(publisherPrefix, tableName) {
+  const name = manifestWebResourceName(publisherPrefix, tableName);
+  const escapedName = name.replaceAll("'", "''");
+  const body = await webApi(`webresourceset?$select=content&$filter=name eq '${escapedName}'&$top=1`);
+  const content = body?.value?.[0]?.content;
+  if (!content) return null;
+  return new TextDecoder().decode(asBytes(content));
 }

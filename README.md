@@ -73,17 +73,36 @@ Version 0.3.8 restores a clean button designer view for live Dataverse ribbons: 
 
 Version 0.3.10 reuses an existing unmanaged solution when its generated name already exists, rather than failing to create a duplicate. New display names begin with `Dynamics Ribbon Designer -`; their short generated unique names use `drd`.
 
-Version 0.3.12 removes the direct-launch URL from the managed solution description. Launch the designer from the solution's Configuration page instead.
+Version 0.3.13 restores the direct-launch URL in the managed solution description as a generic placeholder: `https://&lt;your-environment-host&gt;/WebResources/brg_/DynamicsRibbonDesigner/index.html`. It also resets the selected development solution whenever the table or ribbon changes, validates the generated solution unique-name length, and reports clipboard failures clearly.
+
+Version 0.3.14 adds a review-before-prepare panel, a downloadable JSON change manifest, a download-only rollback package builder that removes only manifest-owned hide actions, and compatibility guidance for controls outside the supported surfaces or without a command mapping.
+
+Version 0.3.15 sorts command and review lists alphabetically by friendly button label.
+
+### Version 0.3.17
+
+- Reads every hideable control type — `Button`, `ToggleButton`, `SplitButton`, `FlyoutAnchor` and `CheckBox` — instead of `Button` alone, so flyout and split-menu commands are now selectable.
+- Retrieves the ribbon once per location filter, so each control's command surface comes from Dataverse rather than from pattern matching on the control ID. A control that appears on several surfaces is listed once, with every surface it belongs to.
+- Verifies the import job before publishing: the job's component results are read back, failures are reported with their Dataverse error text, and nothing is published when the import failed.
+- Offers a table picker of customisable tables and a publisher-prefix picker sourced from the environment's publishers.
+- Adds an in-environment rollback that reuses the same export, backup, approval and confirmation guard as Apply.
+- Writes the change manifest into the customisation solution as a publisher-owned web resource (`<prefix>_/ribbonmanifests/<table>.js`, JSON text in a JScript resource because Dataverse has no JSON web-resource type), so a rollback no longer depends on the operator still holding the downloaded JSON file.
+- Adds **Select all shown** and **Clear selection** for the filtered command list.
+- Restores the table, publisher, surface filter, solution name and selection after a page reload.
+- Reads the displayed application version from `package.json` at build time rather than from a literal in the source.
+- Fixes a selection counter that counted controls from a previous ribbon: after a reload the sidebar and the list header could claim commands were selected while the review panel and the generated XML were empty. All counters now report the controls present in the loaded ribbon.
+- Fixes the workflow banner still reading "Customisation complete" after an in-environment rollback.
+- Persists only the table, publisher prefix, surface filter and solution name between visits. The button selection is no longer stored: every ribbon load clears it, so a restored selection could never match the controls on screen. A selection left by an earlier version is ignored and dropped.
 
 ## Portable solution packages
 
 The supported Dataverse-native managed package is:
 
-- `release/portable/DynamicsRibbonDesigner_0_3_12_0_managed.zip` — Standard-environment managed update. Its checksum is recorded in `release/portable/SHA256SUMS.txt`.
+- `release/portable/DynamicsRibbonDesigner_0_3_17_0_managed.zip` — Standard-environment managed update. Its checksum is recorded in `release/portable/SHA256SUMS.txt`.
 
-For new deployments or upgrades, use the managed `0.3.12.0` package. It retains the same solution unique name, publisher, component IDs and Configuration Page as its prior releases, so Dataverse recognizes it as an upgrade.
+For new deployments or upgrades, use the managed `0.3.17.0` package. It retains the same solution unique name, publisher, component IDs and Configuration Page as its prior releases, so Dataverse recognizes it as an upgrade.
 
-After importing `0.3.12.0`, open **Power Apps > Solutions > Dynamics Ribbon Designer > Configuration** to launch the designer without storing an environment-specific URL.
+After importing `0.3.17.0`, open **Power Apps > Solutions > Dynamics Ribbon Designer > Configuration** to launch the designer without storing an environment-specific URL.
 
 The package contains no source-environment URL, connection reference, tenant ID, or environment-specific dependency.
 
@@ -91,8 +110,8 @@ The package contains three fixed-name solution components: the HTML page, compil
 
 ## Prototype boundaries
 
-- Supported now: XML import, Dataverse retrieval, Form/Main Grid/Subgrid classification, filtering, hide/unhide selection, XML preview, copy/download, safe merge into an uploaded unmanaged ZIP, and guarded editing of an existing unmanaged solution with backup and targeted publish.
-- Next: table metadata picker, command inheritance detail, rollback automation, import-job diagnostics and managed build-environment integration.
+- Supported now: XML import, per-surface Dataverse retrieval, table and publisher pickers, filtering and bulk selection, XML preview, copy/download, safe merge into an uploaded unmanaged ZIP, guarded editing of an existing unmanaged solution with backup, import-job verification and targeted publish, and guarded rollback from a stored or downloaded change manifest.
+- Next: command inheritance detail and managed build-environment integration.
 - Some Unified Interface controls are injected or hardcoded and cannot be changed through `RibbonDiffXml`.
 - Removing a button is not a security boundary; privileges must enforce restricted operations.
 

@@ -38,6 +38,28 @@ function findTableEntity(document, logicalName) {
   });
 }
 
+function openUnmanagedSolution(solutionBytes) {
+  let files;
+  try {
+    files = unzipSync(solutionBytes);
+  } catch {
+    throw new Error("The selected file is not a valid solution ZIP.");
+  }
+
+  const solutionKey = findEntry(files, "solution.xml");
+  const customizationsKey = findEntry(files, "customizations.xml");
+  if (!solutionKey || !customizationsKey) {
+    throw new Error("The ZIP does not contain solution.xml and customizations.xml.");
+  }
+
+  const solution = parseXml(strFromU8(files[solutionKey]), "solution.xml");
+  const managed = [...solution.getElementsByTagName("Managed")][0]?.textContent?.trim();
+  if (managed !== "0") {
+    throw new Error("Upload an unmanaged solution ZIP. Managed packages cannot be edited.");
+  }
+  return { files, customizationsKey };
+}
+
 export function patchCustomizationsXml(customizationsXml, tableName, ribbonDiffXml) {
   const customizations = parseXml(customizationsXml, "customizations.xml");
   const generated = parseXml(ribbonDiffXml, "Generated RibbonDiffXml");
@@ -98,25 +120,7 @@ export function patchCustomizationsXml(customizationsXml, tableName, ribbonDiffX
 
 export function buildPatchedSolutionZip(solutionBytes, tableName, ribbonDiffXml) {
   if (!tableName?.trim()) throw new Error("Enter the table logical name first.");
-
-  let files;
-  try {
-    files = unzipSync(solutionBytes);
-  } catch {
-    throw new Error("The selected file is not a valid solution ZIP.");
-  }
-
-  const solutionKey = findEntry(files, "solution.xml");
-  const customizationsKey = findEntry(files, "customizations.xml");
-  if (!solutionKey || !customizationsKey) {
-    throw new Error("The ZIP does not contain solution.xml and customizations.xml.");
-  }
-
-  const solution = parseXml(strFromU8(files[solutionKey]), "solution.xml");
-  const managed = [...solution.getElementsByTagName("Managed")][0]?.textContent?.trim();
-  if (managed !== "0") {
-    throw new Error("Upload an unmanaged solution ZIP. Managed packages cannot be edited.");
-  }
+  const { files, customizationsKey } = openUnmanagedSolution(solutionBytes);
 
   const patched = patchCustomizationsXml(
     strFromU8(files[customizationsKey]),
@@ -130,4 +134,48 @@ export function buildPatchedSolutionZip(solutionBytes, tableName, ribbonDiffXml)
     added: patched.added,
     skipped: patched.skipped
   };
+}
+
+export function parseChangeManifest(json) {
+  let manifest;
+  try {
+    manifest = typeof json === "string" ? JSON.parse(json) : json;
+  } catch {
+    throw new Error("The change manifest is not valid JSON.");
+  }
+  if (!manifest?.tableLogicalName?.trim() || !manifest?.ribbonDiffXml?.trim()) {
+    throw new Error("The change manifest does not contain a table and RibbonDiffXml.");
+  }
+  const ribbon = parseXml(manifest.ribbonDiffXml, "Manifest RibbonDiffXml");
+  const hideActionIds = new Set(
+    descendants(ribbon.documentElement, "HideCustomAction")
+      .map((action) => action.getAttribute("HideActionId"))
+      .filter(Boolean)
+  );
+  if (!hideActionIds.size) {
+    throw new Error("The change manifest does not contain any hide actions to roll back.");
+  }
+  return { ...manifest, hideActionIds };
+}
+
+export function buildRollbackSolutionZip(solutionBytes, manifest) {
+  const rollback = parseChangeManifest(manifest);
+  const { files, customizationsKey } = openUnmanagedSolution(solutionBytes);
+  const customizations = parseXml(strFromU8(files[customizationsKey]), "customizations.xml");
+  const entity = findTableEntity(customizations, rollback.tableLogicalName);
+  if (!entity) {
+    throw new Error(`The uploaded solution does not contain the '${rollback.tableLogicalName}' table from the manifest.`);
+  }
+
+  const targetRibbon = directChild(entity, "RibbonDiffXml");
+  const customActions = targetRibbon ? directChild(targetRibbon, "CustomActions") : null;
+  const matchingActions = customActions
+    ? descendants(customActions, "HideCustomAction").filter((action) => rollback.hideActionIds.has(action.getAttribute("HideActionId")))
+    : [];
+  if (!matchingActions.length) {
+    throw new Error("None of this manifest's hide actions were found in the uploaded solution.");
+  }
+  for (const action of matchingActions) action.parentNode.removeChild(action);
+  files[customizationsKey] = strToU8(new XMLSerializer().serializeToString(customizations));
+  return { bytes: zipSync(files, { level: 6 }), removed: matchingActions.length, tableName: rollback.tableLogicalName };
 }

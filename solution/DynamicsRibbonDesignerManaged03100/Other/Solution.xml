@@ -6,9 +6,9 @@
       <LocalizedName description="Dynamics Ribbon Designer" languagecode="1033" />
     </LocalizedNames>
     <Descriptions>
-      <Description description="Visual designer for inspecting Dataverse command bars and generating RibbonDiffXml hide customizations. Open Configuration in this solution to launch the designer." languagecode="1033" />
+      <Description description="Visual designer for inspecting Dataverse command bars and generating RibbonDiffXml hide customizations. Open Configuration in this solution, or directly:&#10;&#10;https://&lt;your-environment-host&gt;/WebResources/brg_/DynamicsRibbonDesigner/index.html" languagecode="1033" />
     </Descriptions>
-    <Version>0.3.12.0</Version>
+    <Version>0.3.17.0</Version>
     <Managed>1</Managed>
     <ConfigurationPage>brg_/DynamicsRibbonDesigner/index.html</ConfigurationPage>
     <Publisher>
